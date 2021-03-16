@@ -68,7 +68,7 @@ func createMapValue(ipLayer gopacket.Layer, packet gopacket.Packet, IPMap map[st
 		key1srcDst := d.srcIP + "->" + d.dstIP + ", proto: " + d.udpOrTcp
 
 		if key1srcDst == "10.0.0.124->51.120.77.187, proto: tcp" {
-			fmt.Println("len: ", packet.Metadata().Length)
+			fmt.Printf("len: %s", appLayer.Payload())
 		}
 		d.totalAmount = packet.Metadata().Length
 
@@ -162,6 +162,11 @@ func doMetrics(IPMap map[string]map[string]data, refresh int) {
 	}
 }
 
+// Convert a uint16 to host byte order (big endian)
+func Htons(v uint16) int {
+	return int((v << 8) | (v >> 8))
+}
+
 func main() {
 	filter := flag.String("filter", "", "filter to use, same as nmap filters")
 	promHTTP := flag.String("promHTTP", ":8888", "set ip and port for prometheus to listen. Ex. localhost:8888")
@@ -204,6 +209,10 @@ func main() {
 		log.Printf("error: handle.SetBPFFilter failed: %v\n", err)
 	}
 
+	// ---------
+
+	// ---------
+
 	IPMap := map[string]map[string]data{}
 
 	go doMetrics(IPMap, *promRefresh)
@@ -212,7 +221,12 @@ func main() {
 
 	// gopacket.NetPacketSource will return a channel that we range over
 	src := gopacket.NewPacketSource(handle, handle.LinkType())
-	for packet := range src.Packets() {
+
+	for {
+		packet, err := src.NextPacket()
+		if err != nil {
+			log.Printf("error: NextPacket: %v\n", err)
+		}
 		ipLayer := packet.Layer(layers.LayerTypeIPv4)
 		// If it is a real packet, check the content of the packet, and
 		// update the map with the new values.
