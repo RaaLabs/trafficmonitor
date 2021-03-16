@@ -143,6 +143,8 @@ func main() {
 	promHTTP := flag.String("promHTTP", ":8888", "set ip and port for prometheus to listen. Ex. localhost:8888")
 	promRefresh := flag.Int("promRefresh", 5, "the refresh rate in seconds that prometheus should refresh the metrics")
 	printConsole := flag.Bool("printConsole", false, "set to true if you also want to print the output of the gathered metrics to console")
+	var localNetworks flagStringSlice
+	flag.Var(&localNetworks, "startCLISubscriber", "enter value")
 	flag.Parse()
 
 	go startPrometheus(*promHTTP)
