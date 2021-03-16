@@ -21,14 +21,14 @@ var mu sync.Mutex
 
 const (
 	iface   = "any"
-	snapLen = int32(1600)
+	snapLen = int32(65535)
 	promisc = false
 	timeout = pcap.BlockForever
 )
 
 // Information about the packet
 type data struct {
-	firstSeen   time.Time
+	firstSeen   string
 	udpOrTcp    string
 	srcIP       string
 	srcPort     string
@@ -44,41 +44,67 @@ func createMapValue(ipLayer gopacket.Layer, packet gopacket.Packet, IPMap map[st
 	appLayer := packet.ApplicationLayer()
 	if appLayer != nil {
 
-		d := data{firstSeen: time.Now()}
+		d := data{}
 
+		// Check
 		if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
-			tcp, _ := tcpLayer.(*layers.TCP)
-			d.srcPort = tcp.SrcPort.String()
-			d.dstPort = tcp.DstPort.String()
 			d.udpOrTcp = "tcp"
-		}
-
-		if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
-			udp, _ := udpLayer.(*layers.UDP)
-			d.srcPort = udp.SrcPort.String()
-			d.dstPort = udp.DstPort.String()
+			tcp, _ := tcpLayer.(*layers.TCP)
+			d.srcPort = d.udpOrTcp + "/" + tcp.SrcPort.String()
+			d.dstPort = d.udpOrTcp + "/" + tcp.DstPort.String()
+		} else if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
 			d.udpOrTcp = "udp"
+			udp, _ := udpLayer.(*layers.UDP)
+			d.srcPort = d.udpOrTcp + "/" + udp.SrcPort.String()
+			d.dstPort = d.udpOrTcp + "/" + udp.DstPort.String()
+		} else {
+			return
 		}
 
+		d.firstSeen = time.Now().Format("2006 01 2 15:04:05")
 		d.srcIP = ip.SrcIP.String()
 		d.dstIP = ip.DstIP.String()
-		key1srcDst := d.srcIP + "->" + d.dstIP + ", proto: " + d.udpOrTcp
-		key2portInfo := d.udpOrTcp + "/" + d.dstPort
 
+		key1srcDst := d.srcIP + "->" + d.dstIP + ", proto: " + d.udpOrTcp
+
+		if key1srcDst == "10.0.0.124->51.120.77.187, proto: tcp" {
+			fmt.Println("len: ", packet.Metadata().Length)
+		}
 		d.totalAmount = packet.Metadata().Length
 
+		// key1srcDstRev := d.dstIP + "->" + d.srcIP + ", proto: " + d.udpOrTcp
+		// // Check if this is the return traffic for udp
+		// if _, ok := IPMap[key1srcDstRev][d.srcPort]; ok {
+		// 	if d.dstIP == "10.0.0.124" || d.dstIP == "127.0.0.1" {
+		// 		d.dstPort = "reply_" + d.srcPort
+		// 	}
+		// }
+
 		// If already present, copy totalLength and time from previous.
-		if v, ok := IPMap[key1srcDst]; ok && IPMap[key1srcDst][key2portInfo].udpOrTcp == d.udpOrTcp {
-			d.totalAmount = v[key2portInfo].totalAmount + d.totalAmount
-			d.firstSeen = v[key2portInfo].firstSeen
+		if v, ok := IPMap[key1srcDst][d.dstPort]; ok {
+			//fmt.Printf("**************************** PRESENT ****************************\n")
+			d.totalAmount = v.totalAmount + d.totalAmount
+			d.firstSeen = v.firstSeen
+		} else {
+			//fmt.Printf("**************************** NOT PRESENT ****************************\n")
 		}
 
 		// Declare the inner map, and then store it in the outer map.
 		protoMap := map[string]data{}
-		protoMap[key2portInfo] = d
+		protoMap[d.dstPort] = d
 		mu.Lock()
 		IPMap[key1srcDst] = protoMap
 		mu.Unlock()
+
+		//fmt.Printf("--------------------Start-----------------------\n")
+
+		//mu.Lock()
+		//for k1, v1 := range IPMap {
+		//	for k2, v2 := range v1 {
+		//		fmt.Printf("k1: %v, k2: %v, v2: %#v\n", k1, k2, v2)
+		//	}
+		//}
+		//mu.Unlock()
 	}
 }
 
@@ -87,16 +113,12 @@ func printMap(IPMap map[string]map[string]data, timeStart time.Time) {
 	fmt.Printf("--------------------Start: %v-----------------------\n", timeStart)
 
 	mu.Lock()
-	for k, v := range IPMap {
-		fmt.Printf("addr: %v", k)
-		for k, v := range v {
-			fmt.Printf(", port: %v", k)
-			fmt.Printf(", size: %v, firstSeen: %v, srcPort: %v, dstPort: %v", v.totalAmount, v.firstSeen, v.srcPort, v.dstPort)
+	for k1, v1 := range IPMap {
+		for k2, v2 := range v1 {
+			fmt.Printf("k1: %v, k2: %v, v2: %#v\n", k1, k2, v2)
 		}
-		fmt.Println()
 	}
 	mu.Unlock()
-	fmt.Printf("--------------------------------------------\n")
 }
 
 // Start prometheus listener.
@@ -118,7 +140,8 @@ func doMetrics(IPMap map[string]map[string]data, refresh int) {
 			Name: "hosts_src_dst",
 			Help: "Number of bytes transfered between hosts",
 		},
-		[]string{"addr", "port", "firstSeen", "srcPort", "dstPort"},
+		// []string{"addr", "port", "firstSeen", "srcPort", "dstPort"},
+		[]string{"addr", "port", "firstSeen", "dstPort"},
 	)
 
 	// Metrics have to be registered to be exposed:
@@ -129,7 +152,8 @@ func doMetrics(IPMap map[string]map[string]data, refresh int) {
 		for k1, v1 := range IPMap {
 			// fmt.Printf("addr: %v", k1)
 			for k2, v2 := range v1 {
-				hosts.With(prometheus.Labels{"addr": k1, "port": k2, "firstSeen": v2.firstSeen.String(), "srcPort": v2.srcPort, "dstPort": v2.dstPort}).Set(float64(v2.totalAmount))
+				// hosts.With(prometheus.Labels{"addr": k1, "port": k2, "firstSeen": v2.firstSeen.String(), "srcPort": v2.srcPort, "dstPort": v2.dstPort}).Set(float64(v2.totalAmount))
+				hosts.With(prometheus.Labels{"addr": k1, "port": k2, "firstSeen": v2.firstSeen, "dstPort": v2.dstPort}).Set(float64(v2.totalAmount))
 			}
 		}
 		mu.Unlock()
@@ -194,6 +218,8 @@ func main() {
 		// update the map with the new values.
 		if ipLayer != nil {
 			createMapValue(ipLayer, packet, IPMap)
+		} else {
+			continue
 		}
 
 		if *printConsole {
