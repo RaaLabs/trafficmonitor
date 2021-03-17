@@ -21,7 +21,7 @@ var mu sync.Mutex
 
 const (
 	iface   = "any"
-	snapLen = int32(65535)
+	snapLen = int32(1500)
 	promisc = false
 	timeout = pcap.BlockForever
 )
@@ -108,19 +108,6 @@ func createMapValue(ipLayer gopacket.Layer, packet gopacket.Packet, IPMap map[st
 	}
 }
 
-// Will print out the content of the map to STDOUT.
-func printMap(IPMap map[string]map[string]data, timeStart time.Time) {
-	fmt.Printf("--------------------Start: %v-----------------------\n", timeStart)
-
-	mu.Lock()
-	for k1, v1 := range IPMap {
-		for k2, v2 := range v1 {
-			fmt.Printf("k1: %v, k2: %v, v2: %#v\n", k1, k2, v2)
-		}
-	}
-	mu.Unlock()
-}
-
 // Start prometheus listener.
 func startPrometheus(port string) {
 	n, err := net.Listen("tcp", port)
@@ -162,16 +149,10 @@ func doMetrics(IPMap map[string]map[string]data, refresh int) {
 	}
 }
 
-// Convert a uint16 to host byte order (big endian)
-func Htons(v uint16) int {
-	return int((v << 8) | (v >> 8))
-}
-
 func main() {
 	filter := flag.String("filter", "", "filter to use, same as nmap filters")
 	promHTTP := flag.String("promHTTP", ":8888", "set ip and port for prometheus to listen. Ex. localhost:8888")
 	promRefresh := flag.Int("promRefresh", 5, "the refresh rate in seconds that prometheus should refresh the metrics")
-	printConsole := flag.Bool("printConsole", false, "set to true if you also want to print the output of the gathered metrics to console")
 	var localNetworks flagStringSlice
 	flag.Var(&localNetworks, "startCLISubscriber", "enter value")
 	flag.Parse()
@@ -198,7 +179,7 @@ func main() {
 	}
 
 	// Get a BPF filter handle that we can set the filter on.
-	handle, err := pcap.OpenLive(iface, snapLen, promisc, timeout)
+	handle, err := pcap.OpenLive("en0", 65535, true, pcap.BlockForever)
 	if err != nil {
 		log.Printf("error: pcap.OpenLive failed: %v\n", err)
 	}
@@ -209,35 +190,48 @@ func main() {
 		log.Printf("error: handle.SetBPFFilter failed: %v\n", err)
 	}
 
-	// ---------
-
-	// ---------
-
 	IPMap := map[string]map[string]data{}
 
 	go doMetrics(IPMap, *promRefresh)
 
-	timeStart := time.Now()
-
-	// gopacket.NetPacketSource will return a channel that we range over
-	src := gopacket.NewPacketSource(handle, handle.LinkType())
+	var eth layers.Ethernet
+	var ip4 layers.IPv4
+	var tcp layers.TCP
+	var udp layers.UDP
+	var payload gopacket.Payload
+	parser := gopacket.NewDecodingLayerParser(layers.LayerTypeEthernet, &eth, &ip4, &tcp, &udp, &payload)
+	decoded := make([]gopacket.LayerType, 0, 10)
 
 	for {
-		packet, err := src.NextPacket()
+		data, ci, err := handle.ZeroCopyReadPacketData()
 		if err != nil {
-			log.Printf("error: NextPacket: %v\n", err)
+			log.Printf("error getting packet: %v %v", err, ci)
+			continue
 		}
-		ipLayer := packet.Layer(layers.LayerTypeIPv4)
-		// If it is a real packet, check the content of the packet, and
-		// update the map with the new values.
-		if ipLayer != nil {
-			createMapValue(ipLayer, packet, IPMap)
-		} else {
+		err = parser.DecodeLayers(data, &decoded)
+		if err != nil {
+			// log.Printf("error decoding packet: %v", err)
 			continue
 		}
 
-		if *printConsole {
-			printMap(IPMap, timeStart)
+		if err := parser.DecodeLayers(data, &decoded); err != nil {
+			fmt.Fprintf(os.Stderr, "Could not decode layers: %v\n", err)
+		}
+
+		for _, typ := range decoded {
+			fmt.Println("  Successfully decoded layer type", typ)
+			switch typ {
+			case layers.LayerTypeEthernet:
+				fmt.Println("    Eth ", eth.SrcMAC, eth.DstMAC)
+			case layers.LayerTypeIPv4:
+				fmt.Println("    IP4 ", ip4.SrcIP, ip4.DstIP)
+			case layers.LayerTypeTCP:
+				fmt.Println("    TCP ", tcp.SrcPort, tcp.DstPort)
+			case layers.LayerTypeUDP:
+				fmt.Println("    UDP ", udp.SrcPort, udp.DstPort)
+			case gopacket.LayerTypePayload:
+				fmt.Printf("    Payload %v\n", payload)
+			}
 		}
 	}
 }
