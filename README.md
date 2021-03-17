@@ -11,8 +11,10 @@ Flags that are currently supported are:
 ```text
   -filter string
     filter to use, same as nmap filters
-  -printConsole
-    set to true if you also want to print the output of the gathered metrics to console
+  -iface string
+    the name of the interface to listen on
+  -localIPs value
+    comma separated list of local host adresses
   -promHTTP string
     set ip and port for prometheus to listen. Ex. localhost:8888 (default ":8888")
   -promRefresh int
@@ -24,6 +26,11 @@ The metrics produced will look like this
 ```prometheus
 # HELP hosts_src_dst Number of bytes transfered between hosts
 # TYPE hosts_src_dst gauge
-hosts_src_dst{addr="1.1.1.1->10.0.0.124, proto: udp",dstPort="50508",firstSeen="2021-03-15 16:11:30.353535 +0100 CET m=+88.549728083",port="udp/50508",srcPort="53(domain)"} 119
-hosts_src_dst{addr="1.1.1.1->10.0.0.124, proto: udp",dstPort="50961",firstSeen="2021-03-15 16:11:09.803995 +0100 CET m=+68.000553441",port="udp/50961",srcPort="53(domain)"} 160
+hosts_src_dst{addr="10.0.0.124->216.58.211.138, proto: udp",dstPort="udp/443(https)",firstSeen="2021 03 17 13:31:58",port="udp/443(https)"} 5602
+hosts_src_dst{addr="10.0.0.124->239.255.255.250, proto: udp",dstPort="udp/1900(ssdp)",firstSeen="2021 03 17 13:31:55",port="udp/1900(ssdp)"} 696
+hosts_src_dst{addr="10.0.0.124->51.120.77.187, proto: tcp",dstPort="tcp/80(http)",firstSeen="2021 03 17 13:32:04",port="tcp/80(http)"} 178
+hosts_src_dst{addr="10.0.0.124->64.233.162.189, proto: udp",dstPort="udp/443(https)",firstSeen="2021 03 17 13:32:01",port="udp/443(https)"} 580
+hosts_src_dst{addr="216.58.211.138->10.0.0.124, proto: udp",dstPort="reply_udp/443(https)",firstSeen="2021 03 17 13:31:58",port="reply_udp/443(https)"} 6229
+hosts_src_dst{addr="51.120.77.187->10.0.0.124, proto: tcp",dstPort="reply_tcp/80(http)",firstSeen="2021 03 17 13:32:04",port="reply_tcp/80(http)"} 2.724882e+06
+hosts_src_dst{addr="64.233.162.189->10.0.0.124, proto: udp",dstPort="reply_udp/443(https)",firstSeen="2021 03 17 13:32:01",port="reply_udp/443(https)"} 472
 ```
