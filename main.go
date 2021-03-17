@@ -203,20 +203,22 @@ func main() {
 	decoded := make([]gopacket.LayerType, 0, 10)
 
 	for {
-		data, ci, err := handle.ZeroCopyReadPacketData()
+		packetData, ci, err := handle.ZeroCopyReadPacketData()
 		if err != nil {
 			log.Printf("error getting packet: %v %v", err, ci)
 			continue
 		}
-		err = parser.DecodeLayers(data, &decoded)
+		err = parser.DecodeLayers(packetData, &decoded)
 		if err != nil {
 			// log.Printf("error decoding packet: %v", err)
 			continue
 		}
 
-		if err := parser.DecodeLayers(data, &decoded); err != nil {
+		if err := parser.DecodeLayers(packetData, &decoded); err != nil {
 			fmt.Fprintf(os.Stderr, "Could not decode layers: %v\n", err)
 		}
+
+		d := data{}
 
 		for _, typ := range decoded {
 			fmt.Println("  Successfully decoded layer type", typ)
@@ -225,13 +227,50 @@ func main() {
 				fmt.Println("    Eth ", eth.SrcMAC, eth.DstMAC)
 			case layers.LayerTypeIPv4:
 				fmt.Println("    IP4 ", ip4.SrcIP, ip4.DstIP)
+				d.firstSeen = time.Now().Format("2006 01 2 15:04:05")
+				d.srcIP = ip4.SrcIP.String()
+				d.dstIP = ip4.DstIP.String()
 			case layers.LayerTypeTCP:
-				fmt.Println("    TCP ", tcp.SrcPort, tcp.DstPort)
+				// fmt.Println("    TCP ", tcp.SrcPort, tcp.DstPort)
+				d.udpOrTcp = "tcp"
+				d.srcPort = d.udpOrTcp + "/" + tcp.SrcPort.String()
+				d.dstPort = d.udpOrTcp + "/" + tcp.DstPort.String()
 			case layers.LayerTypeUDP:
-				fmt.Println("    UDP ", udp.SrcPort, udp.DstPort)
+				// fmt.Println("    UDP ", udp.SrcPort, udp.DstPort)
+				d.udpOrTcp = "udp"
+				d.srcPort = d.udpOrTcp + "/" + udp.SrcPort.String()
+				d.dstPort = d.udpOrTcp + "/" + udp.DstPort.String()
 			case gopacket.LayerTypePayload:
-				fmt.Printf("    Payload %v\n", payload)
+				// fmt.Printf("    Payload %v\n", payload)
+				d.totalAmount = len(payload.LayerContents())
 			}
 		}
+
+		key1srcDst := d.srcIP + "->" + d.dstIP + ", proto: " + d.udpOrTcp
+
+		key1srcDstRev := d.dstIP + "->" + d.srcIP + ", proto: " + d.udpOrTcp
+		// Check if this is the return traffic for udp
+		if _, ok := IPMap[key1srcDstRev][d.srcPort]; ok {
+			if d.dstIP == "10.0.0.124" || d.dstIP == "127.0.0.1" {
+				d.dstPort = "reply_" + d.srcPort
+			}
+		}
+
+		// If already present, copy totalLength and time from previous.
+		if v, ok := IPMap[key1srcDst][d.dstPort]; ok {
+			//fmt.Printf("**************************** PRESENT ****************************\n")
+			d.totalAmount = v.totalAmount + d.totalAmount
+			d.firstSeen = v.firstSeen
+		} else {
+			//fmt.Printf("**************************** NOT PRESENT ****************************\n")
+		}
+
+		// Declare the inner map, and then store it in the outer map.
+		protoMap := map[string]data{}
+		protoMap[d.dstPort] = d
+		mu.Lock()
+		IPMap[key1srcDst] = protoMap
+		mu.Unlock()
+
 	}
 }
