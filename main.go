@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -37,77 +36,6 @@ type data struct {
 	totalAmount int
 }
 
-// Take the provided information about an IP packet, and store the
-// wanted values in a map structure.
-func createMapValue(ipLayer gopacket.Layer, packet gopacket.Packet, IPMap map[string]map[string]data) {
-	ip, _ := ipLayer.(*layers.IPv4)
-	appLayer := packet.ApplicationLayer()
-	if appLayer != nil {
-
-		d := data{}
-
-		// Check
-		if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
-			d.udpOrTcp = "tcp"
-			tcp, _ := tcpLayer.(*layers.TCP)
-			d.srcPort = d.udpOrTcp + "/" + tcp.SrcPort.String()
-			d.dstPort = d.udpOrTcp + "/" + tcp.DstPort.String()
-		} else if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
-			d.udpOrTcp = "udp"
-			udp, _ := udpLayer.(*layers.UDP)
-			d.srcPort = d.udpOrTcp + "/" + udp.SrcPort.String()
-			d.dstPort = d.udpOrTcp + "/" + udp.DstPort.String()
-		} else {
-			return
-		}
-
-		d.firstSeen = time.Now().Format("2006 01 2 15:04:05")
-		d.srcIP = ip.SrcIP.String()
-		d.dstIP = ip.DstIP.String()
-
-		key1srcDst := d.srcIP + "->" + d.dstIP + ", proto: " + d.udpOrTcp
-
-		if key1srcDst == "10.0.0.124->51.120.77.187, proto: tcp" {
-			fmt.Printf("len: %s", appLayer.Payload())
-		}
-		d.totalAmount = packet.Metadata().Length
-
-		// key1srcDstRev := d.dstIP + "->" + d.srcIP + ", proto: " + d.udpOrTcp
-		// // Check if this is the return traffic for udp
-		// if _, ok := IPMap[key1srcDstRev][d.srcPort]; ok {
-		// 	if d.dstIP == "10.0.0.124" || d.dstIP == "127.0.0.1" {
-		// 		d.dstPort = "reply_" + d.srcPort
-		// 	}
-		// }
-
-		// If already present, copy totalLength and time from previous.
-		if v, ok := IPMap[key1srcDst][d.dstPort]; ok {
-			//fmt.Printf("**************************** PRESENT ****************************\n")
-			d.totalAmount = v.totalAmount + d.totalAmount
-			d.firstSeen = v.firstSeen
-		} else {
-			//fmt.Printf("**************************** NOT PRESENT ****************************\n")
-		}
-
-		// Declare the inner map, and then store it in the outer map.
-		protoMap := map[string]data{}
-		protoMap[d.dstPort] = d
-		mu.Lock()
-		IPMap[key1srcDst] = protoMap
-		mu.Unlock()
-
-		//fmt.Printf("--------------------Start-----------------------\n")
-
-		//mu.Lock()
-		//for k1, v1 := range IPMap {
-		//	for k2, v2 := range v1 {
-		//		fmt.Printf("k1: %v, k2: %v, v2: %#v\n", k1, k2, v2)
-		//	}
-		//}
-		//mu.Unlock()
-	}
-}
-
 // Start prometheus listener.
 func startPrometheus(port string) {
 	n, err := net.Listen("tcp", port)
@@ -137,7 +65,6 @@ func doMetrics(IPMap map[string]map[string]data, refresh int) {
 	for {
 		mu.Lock()
 		for k1, v1 := range IPMap {
-			// fmt.Printf("addr: %v", k1)
 			for k2, v2 := range v1 {
 				// hosts.With(prometheus.Labels{"addr": k1, "port": k2, "firstSeen": v2.firstSeen.String(), "srcPort": v2.srcPort, "dstPort": v2.dstPort}).Set(float64(v2.totalAmount))
 				hosts.With(prometheus.Labels{"addr": k1, "port": k2, "firstSeen": v2.firstSeen, "dstPort": v2.dstPort}).Set(float64(v2.totalAmount))
@@ -150,36 +77,23 @@ func doMetrics(IPMap map[string]map[string]data, refresh int) {
 }
 
 func main() {
+	iface := flag.String("iface", "", "the name of the interface to listen on")
 	filter := flag.String("filter", "", "filter to use, same as nmap filters")
 	promHTTP := flag.String("promHTTP", ":8888", "set ip and port for prometheus to listen. Ex. localhost:8888")
 	promRefresh := flag.Int("promRefresh", 5, "the refresh rate in seconds that prometheus should refresh the metrics")
 	var localNetworks flagStringSlice
-	flag.Var(&localNetworks, "startCLISubscriber", "enter value")
+	flag.Var(&localNetworks, "localNetworks", "comma separated list of local host adresses")
 	flag.Parse()
+
+	if *iface == "" {
+		log.Printf("error: you have to specify an interface to listen on\n")
+		os.Exit(1)
+	}
 
 	go startPrometheus(*promHTTP)
 
-	// Check if the interface exists, or is set to "any"
-	ifs, err := pcap.FindAllDevs()
-	if err != nil {
-		log.Println("error: pcap.FindAllDevs: ", err)
-	}
-
-	var devFound = false
-
-	for _, dev := range ifs {
-		if dev.Name == iface {
-			devFound = true
-		}
-	}
-
-	if !devFound && iface != "any" {
-		log.Printf("error: did not find the interface %v\n", iface)
-		return
-	}
-
 	// Get a BPF filter handle that we can set the filter on.
-	handle, err := pcap.OpenLive("en0", 65535, true, pcap.BlockForever)
+	handle, err := pcap.OpenLive(*iface, 65535, true, pcap.BlockForever)
 	if err != nil {
 		log.Printf("error: pcap.OpenLive failed: %v\n", err)
 	}
@@ -215,35 +129,33 @@ func main() {
 		}
 
 		if err := parser.DecodeLayers(packetData, &decoded); err != nil {
-			fmt.Fprintf(os.Stderr, "Could not decode layers: %v\n", err)
+			log.Printf("error: could not decode layers: %v\n", err)
 		}
 
 		d := data{}
 
 		for _, typ := range decoded {
-			fmt.Println("  Successfully decoded layer type", typ)
 			switch typ {
 			case layers.LayerTypeEthernet:
-				fmt.Println("    Eth ", eth.SrcMAC, eth.DstMAC)
 			case layers.LayerTypeIPv4:
-				fmt.Println("    IP4 ", ip4.SrcIP, ip4.DstIP)
 				d.firstSeen = time.Now().Format("2006 01 2 15:04:05")
 				d.srcIP = ip4.SrcIP.String()
 				d.dstIP = ip4.DstIP.String()
 			case layers.LayerTypeTCP:
-				// fmt.Println("    TCP ", tcp.SrcPort, tcp.DstPort)
 				d.udpOrTcp = "tcp"
 				d.srcPort = d.udpOrTcp + "/" + tcp.SrcPort.String()
 				d.dstPort = d.udpOrTcp + "/" + tcp.DstPort.String()
 			case layers.LayerTypeUDP:
-				// fmt.Println("    UDP ", udp.SrcPort, udp.DstPort)
 				d.udpOrTcp = "udp"
 				d.srcPort = d.udpOrTcp + "/" + udp.SrcPort.String()
 				d.dstPort = d.udpOrTcp + "/" + udp.DstPort.String()
 			case gopacket.LayerTypePayload:
-				// fmt.Printf("    Payload %v\n", payload)
 				d.totalAmount = len(payload.LayerContents())
 			}
+		}
+
+		if d.totalAmount == 0 {
+			continue
 		}
 
 		key1srcDst := d.srcIP + "->" + d.dstIP + ", proto: " + d.udpOrTcp
@@ -258,14 +170,14 @@ func main() {
 
 		// If already present, copy totalLength and time from previous.
 		if v, ok := IPMap[key1srcDst][d.dstPort]; ok {
-			//fmt.Printf("**************************** PRESENT ****************************\n")
 			d.totalAmount = v.totalAmount + d.totalAmount
 			d.firstSeen = v.firstSeen
-		} else {
-			//fmt.Printf("**************************** NOT PRESENT ****************************\n")
+		} else if v, ok := IPMap[key1srcDst]["reply_"+d.dstPort]; ok {
+			d.totalAmount = v.totalAmount + d.totalAmount
+			d.firstSeen = v.firstSeen
 		}
 
-		// Declare the inner map, and then store it in the outer map.
+		// Declare the inner port map, and then store it in the outer hosts map.
 		protoMap := map[string]data{}
 		protoMap[d.dstPort] = d
 		mu.Lock()
