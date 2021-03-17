@@ -81,13 +81,23 @@ func main() {
 	filter := flag.String("filter", "", "filter to use, same as nmap filters")
 	promHTTP := flag.String("promHTTP", ":8888", "set ip and port for prometheus to listen. Ex. localhost:8888")
 	promRefresh := flag.Int("promRefresh", 5, "the refresh rate in seconds that prometheus should refresh the metrics")
-	var localNetworks flagStringSlice
-	flag.Var(&localNetworks, "localNetworks", "comma separated list of local host adresses")
+	var localIPs flagStringSlice
+	flag.Var(&localIPs, "localIPs", "comma separated list of local host adresses")
 	flag.Parse()
 
 	if *iface == "" {
 		log.Printf("error: you have to specify an interface to listen on\n")
 		os.Exit(1)
+	}
+
+	if !localIPs.ok {
+		log.Printf("error: no local host ip's specified\n")
+		os.Exit(1)
+	}
+
+	localIPMap := map[string]struct{}{}
+	for _, v := range localIPs.values {
+		localIPMap[v] = struct{}{}
 	}
 
 	go startPrometheus(*promHTTP)
@@ -163,7 +173,11 @@ func main() {
 		key1srcDstRev := d.dstIP + "->" + d.srcIP + ", proto: " + d.udpOrTcp
 		// Check if this is the return traffic for udp
 		if _, ok := IPMap[key1srcDstRev][d.srcPort]; ok {
-			if d.dstIP == "10.0.0.124" || d.dstIP == "127.0.0.1" {
+
+			// Check if the ip where defined as a local ip at startup
+			_, ok2 := localIPMap[d.dstIP]
+
+			if ok2 || d.dstIP == "127.0.0.1" {
 				d.dstPort = "reply_" + d.srcPort
 			}
 		}
