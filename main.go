@@ -3,8 +3,6 @@ package main
 import (
 	"flag"
 	"log"
-	"net"
-	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -12,8 +10,6 @@ import (
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 var mu sync.Mutex
@@ -31,46 +27,6 @@ type data struct {
 	totalAmount int
 }
 
-// Start prometheus listener.
-func startPrometheus(port string) {
-	n, err := net.Listen("tcp", port)
-	if err != nil {
-		log.Printf("error: failed to open prometheus listen port: %v\n", err)
-		os.Exit(1)
-	}
-	m := http.NewServeMux()
-	m.Handle("/metrics", promhttp.Handler())
-	http.Serve(n, m)
-}
-
-// doMetrics will register all the metrics for IPMap
-func doMetrics(IPMap map[string]map[string]data, refresh int) {
-	hosts := prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "hosts_src_dst",
-			Help: "Number of bytes transfered between hosts",
-		},
-		// []string{"addr", "port", "firstSeen", "srcPort", "dstPort"},
-		[]string{"addr", "port", "firstSeen", "dstPort"},
-	)
-
-	// Metrics have to be registered to be exposed:
-	prometheus.MustRegister(hosts)
-
-	for {
-		mu.Lock()
-		for k1, v1 := range IPMap {
-			for k2, v2 := range v1 {
-				// hosts.With(prometheus.Labels{"addr": k1, "port": k2, "firstSeen": v2.firstSeen.String(), "srcPort": v2.srcPort, "dstPort": v2.dstPort}).Set(float64(v2.totalAmount))
-				hosts.With(prometheus.Labels{"addr": k1, "port": k2, "firstSeen": v2.firstSeen, "dstPort": v2.dstPort}).Set(float64(v2.totalAmount))
-			}
-		}
-		mu.Unlock()
-
-		time.Sleep(time.Second * time.Duration(refresh))
-	}
-}
-
 func main() {
 	snaplen := flag.Int("snaplen", 1500, "the snaplen. Values from 0-65535")
 	promisc := flag.Bool("promisc", false, "set to true for promiscuous mode")
@@ -80,6 +36,8 @@ func main() {
 	promRefresh := flag.Int("promRefresh", 5, "the refresh rate in seconds that prometheus should refresh the metrics")
 	var localIPs flagStringSlice
 	flag.Var(&localIPs, "localIPs", "comma separated list of local host adresses")
+	var localNetworks = flagStringSlice{values: []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}}
+	flag.Var(&localNetworks, "localNetworks", "The local networks of this host in comma separated CIDR notation. Example 192.168.0.0/24,10.0.0.128/25")
 	flag.Parse()
 
 	if *iface == "" {
@@ -97,7 +55,11 @@ func main() {
 		localIPMap[v] = struct{}{}
 	}
 
-	go startPrometheus(*promHTTP)
+	metrics := newMetrics(localNetworks)
+	go metrics.startPrometheus(*promHTTP)
+
+	IPMap := map[string]map[string]data{}
+	go metrics.do(IPMap, *promRefresh)
 
 	// Get a BPF filter handle that we can set the filter on.
 	handle, err := pcap.OpenLive(*iface, int32(*snaplen), *promisc, pcap.BlockForever)
@@ -110,10 +72,6 @@ func main() {
 	if err != nil {
 		log.Printf("error: handle.SetBPFFilter failed: %v\n", err)
 	}
-
-	IPMap := map[string]map[string]data{}
-
-	go doMetrics(IPMap, *promRefresh)
 
 	var eth layers.Ethernet
 	var ip4 layers.IPv4
