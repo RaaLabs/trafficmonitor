@@ -18,12 +18,7 @@ import (
 
 var mu sync.Mutex
 
-const (
-	iface   = "any"
-	snapLen = int32(1500)
-	promisc = false
-	timeout = pcap.BlockForever
-)
+const ()
 
 // Information about the packet
 type data struct {
@@ -77,6 +72,8 @@ func doMetrics(IPMap map[string]map[string]data, refresh int) {
 }
 
 func main() {
+	snaplen := flag.Int("snaplen", 1500, "the snaplen. Values from 0-65535")
+	promisc := flag.Bool("promisc", false, "set to true for promiscuous mode")
 	iface := flag.String("iface", "", "the name of the interface to listen on")
 	filter := flag.String("filter", "", "filter to use, same as nmap filters")
 	promHTTP := flag.String("promHTTP", ":8888", "set ip and port for prometheus to listen. Ex. localhost:8888")
@@ -103,7 +100,7 @@ func main() {
 	go startPrometheus(*promHTTP)
 
 	// Get a BPF filter handle that we can set the filter on.
-	handle, err := pcap.OpenLive(*iface, 65535, true, pcap.BlockForever)
+	handle, err := pcap.OpenLive(*iface, int32(*snaplen), *promisc, pcap.BlockForever)
 	if err != nil {
 		log.Printf("error: pcap.OpenLive failed: %v\n", err)
 	}
