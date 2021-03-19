@@ -19,6 +19,11 @@ func getLocalIPsInfo(cidrs flagStringSlice) ([]localIPInfo, error) {
 
 	for _, v := range cidrs.values {
 		cidrSplit := strings.Split(v, "/")
+
+		// Check if split contained both an address and maskbits
+		if len(cidrSplit) < 2 {
+			return nil, fmt.Errorf("error: getLocalIPsInfo: wrong format of addr/maskbits")
+		}
 		ipAddrString := cidrSplit[0]
 		maskBitsString := cidrSplit[1]
 

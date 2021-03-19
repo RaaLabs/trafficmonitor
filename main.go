@@ -28,19 +28,6 @@ type data struct {
 }
 
 func main() {
-	{
-		tst := flagStringSlice{
-			values: []string{"192.168.0.1/24", "10.10.10.10/22"},
-		}
-
-		ifsInfo, err := getLocalIPsInfo(tst)
-		if err != nil {
-			log.Printf("error: getIfacesInfo: %v\n", err)
-		}
-
-		fmt.Printf("broadcasts: %v\n", ifsInfo)
-	}
-
 	f := newFlags()
 
 	if f.iface == "" {
@@ -53,9 +40,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	localIPMap := map[string]struct{}{}
-	for _, v := range f.localIPs.values {
-		localIPMap[v] = struct{}{}
+	ifsInfo, err := getLocalIPsInfo(f.localIPs)
+	if err != nil {
+		log.Printf("error: getIfacesInfo: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("broadcasts: %v\n", ifsInfo)
+
+	localIPMap := map[string]localIPInfo{}
+	for _, v := range ifsInfo {
+		localIPMap[v.address] = v
 	}
 
 	metrics := newMetrics(f.localNetworks)

@@ -77,6 +77,10 @@ func (m *metrics) do(IPMap map[string]map[string]data, refresh int) {
 
 				for _, v3 := range m.localNetworks.values {
 					cidr := strings.Split(v3, "/")
+					if len(cidr) < 2 {
+						log.Printf("error: local networks: wrong format of addr/maskbits\n")
+						os.Exit(1)
+					}
 					maskb, err := strconv.Atoi(cidr[1])
 					if err != nil {
 						log.Printf("error: failed to convert maskbits to int: %v\n", err)
