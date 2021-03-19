@@ -146,14 +146,14 @@ func main() {
 			}
 		}
 
-		// ---
-		{
-			_, broadcastOK := broadcastMap[d.dstIP]
-			if broadcastOK {
-				fmt.Printf("broadcast 1: %#v\n", d)
-			}
-		}
-		// ---
+		// // ---
+		// {
+		// 	_, broadcastOK := broadcastMap[d.dstIP]
+		// 	if broadcastOK {
+		// 		fmt.Printf("broadcast 1: %#v\n", d)
+		// 	}
+		// }
+		// // ---
 
 		// // Check if the ip is the broadcast address for any of the local
 		// // networks, and if it is prefix the dstport with _broadcast so
@@ -177,17 +177,18 @@ func main() {
 		// }
 
 		// ---
-		{
-			_, broadcastOK := broadcastMap[d.dstIP]
-			if broadcastOK {
-				fmt.Printf("broadcast 2: %#v\n", d)
-			}
-		}
+		// {
+		// 	_, broadcastOK := broadcastMap[d.dstIP]
+		// 	if broadcastOK {
+		// 		fmt.Printf("broadcast 2: %#v\n", d)
+		// 	}
+		// }
 		// ---
 
 		mu.Lock()
 		var ok bool
 
+		// Check if map key's exist, and of not create them as needed.
 		_, ok = IPMap[d.srcIP]
 		if !ok {
 			IPMap[d.srcIP] = map[string]map[string]data{}
@@ -197,16 +198,17 @@ func main() {
 			IPMap[d.srcIP][d.dstIP] = map[string]data{}
 		}
 
+		// Store the values parsed from the packed in
 		IPMap[d.srcIP][d.dstIP][d.dstPort] = d
 		mu.Unlock()
 
-		fmt.Println("----------------------")
-		for ksip, vsip := range IPMap {
-			for kdip, vdip := range vsip {
-				for kdport, vdport := range vdip {
-					fmt.Printf("ksip: %v, kdip: %v, kdport: %v, vdport: %v\n", ksip, kdip, kdport, vdport)
-				}
-			}
-		}
+		// fmt.Println("----------------------")
+		// for ksip, vsip := range IPMap {
+		// 	for kdip, vdip := range vsip {
+		// 		for kdport, vdport := range vdip {
+		// 			fmt.Printf("ksip: %v, kdip: %v, kdport: %v, vdport: %v\n", ksip, kdip, kdport, vdport)
+		// 		}
+		// 	}
+		// }
 	}
 }

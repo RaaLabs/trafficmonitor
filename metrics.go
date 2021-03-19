@@ -82,19 +82,25 @@ func (m *metrics) do(IPMap map[string]map[string]map[string]data, refresh int) {
 							log.Printf("error: failed to convert maskbits to int: %v\n", err)
 						}
 
+						// Check if the source address is a local address.
 						ok1, err := checkAddrInPrefix(vdport.srcIP, cidr[0], maskb)
 						if err != nil {
 							log.Printf("error: checkAddrInPrefix failed: %v\n", err)
 						}
+
+						// Check if the destination address is a local address.
 						ok2, err := checkAddrInPrefix(vdport.dstIP, cidr[0], maskb)
 						if err != nil {
 							log.Printf("error: checkAddrInPrefix failed: %v\n", err)
 						}
 
+						// If source is local, and destination is not local.
 						if ok1 && !ok2 {
 							totalOut += vdport.totalAmount
 							// fmt.Println("totalOut += v2.totalAmount: ", totalOut)
 						}
+
+						// If source is not local, and destination is local.
 						if !ok1 && ok2 {
 							totalIn += vdport.totalAmount
 							// fmt.Println("totalIn += v2.totalAmount: ", totalIn)
