@@ -46,6 +46,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	broadcastMap := map[string]struct{}{}
+
+	for _, v := range ifsInfo {
+		broadcastMap[v.broadcast] = struct{}{}
+	}
+
 	fmt.Printf("broadcasts: %v\n", ifsInfo)
 
 	localIPMap := map[string]localIPInfo{}
@@ -121,16 +127,44 @@ func main() {
 		key1srcDst := d.srcIP + "->" + d.dstIP + ", proto: " + d.udpOrTcp
 
 		key1srcDstRev := d.dstIP + "->" + d.srcIP + ", proto: " + d.udpOrTcp
-		// Check if this is the return traffic for udp
+		// Check if this is the return traffic for udp by checking if there had
+		// been an outbound sessions using the same two ip adresses reversed present
+		// in the map.
 		if _, ok := IPMap[key1srcDstRev][d.srcPort]; ok {
 
 			// Check if the ip where defined as a local ip at startup
-			_, ok2 := localIPMap[d.dstIP]
+			_, localIPAddrOK := localIPMap[d.dstIP]
 
-			if ok2 || d.dstIP == "127.0.0.1" {
+			// If dstIP where a defined interface or the loopback interface it
+			// means that this is the return traffic. To be able to group these
+			// since the source port of the return traffic for UDP will differ
+			// we rather prefix the source port with reply_, since it is the same
+			// as the dstport port when the outbound sessions was initiated, and
+			// we will then group all the reply/return trafic by the original
+			// outbound dst port prefixed with reply_. This is ok since we don't
+			// care about the source port of the inbound udp trafic.
+			// HERE:
+			if localIPAddrOK || d.dstIP == "127.0.0.1" {
 				d.dstPort = "reply_" + d.srcPort
 			}
 		}
+
+		// ---
+		{
+			_, broadcastOK := broadcastMap[d.dstIP]
+			if broadcastOK {
+				fmt.Printf("broadcast 1: %#v\n", d)
+			}
+		}
+		// ---
+
+		// // Check if the ip is the broadcast address for any of the local
+		// // networks, and if it is prefix the dstport with _broadcast so
+		// // we are able to group them.
+		// _, broadcastOK := broadcastMap[d.dstIP]
+		// if broadcastOK {
+		// 	d.dstPort = "broadcast_" + d.dstPort
+		// }
 
 		// If already present, copy totalLength and time from previous.
 		if v, ok := IPMap[key1srcDst][d.dstPort]; ok {
@@ -140,6 +174,19 @@ func main() {
 			d.totalAmount = v.totalAmount + d.totalAmount
 			d.firstSeen = v.firstSeen
 		}
+		// else if v, ok := IPMap[key1srcDst]["broadcast_"+d.dstPort]; ok {
+		// 	d.totalAmount = v.totalAmount + d.totalAmount
+		// 	d.firstSeen = v.firstSeen
+		// }
+
+		// ---
+		{
+			_, broadcastOK := broadcastMap[d.dstIP]
+			if broadcastOK {
+				fmt.Printf("broadcast 2: %#v\n", d)
+			}
+		}
+		// ---
 
 		// Declare the inner port map, and then store it in the outer hosts map.
 		protoMap := map[string]data{}
