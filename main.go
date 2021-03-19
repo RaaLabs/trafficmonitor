@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"log"
 	"os"
 	"sync"
@@ -28,47 +27,49 @@ type data struct {
 }
 
 func main() {
-	snaplen := flag.Int("snaplen", 1500, "the snaplen. Values from 0-65535")
-	promisc := flag.Bool("promisc", false, "set to true for promiscuous mode")
-	iface := flag.String("iface", "", "the name of the interface to listen on")
-	filter := flag.String("filter", "", "filter to use, same as nmap filters")
-	promHTTP := flag.String("promHTTP", ":8888", "set ip and port for prometheus to listen. Ex. localhost:8888")
-	promRefresh := flag.Int("promRefresh", 5, "the refresh rate in seconds that prometheus should refresh the metrics")
-	var localIPs flagStringSlice
-	flag.Var(&localIPs, "localIPs", "comma separated list of local host adresses")
-	var localNetworks = flagStringSlice{values: []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}}
-	flag.Var(&localNetworks, "localNetworks", "The local networks of this host in comma separated CIDR notation. Example 192.168.0.0/24,10.0.0.128/25")
-	flag.Parse()
+	//snaplen := flag.Int("snaplen", 1500, "the snaplen. Values from 0-65535")
+	//promisc := flag.Bool("promisc", false, "set to true for promiscuous mode")
+	//iface := flag.String("iface", "", "the name of the interface to listen on")
+	//filter := flag.String("filter", "", "filter to use, same as nmap filters")
+	//promHTTP := flag.String("promHTTP", ":8888", "set ip and port for prometheus to listen. Ex. localhost:8888")
+	//promRefresh := flag.Int("promRefresh", 5, "the refresh rate in seconds that prometheus should refresh the metrics")
+	//var localIPs flagStringSlice
+	//flag.Var(&localIPs, "localIPs", "comma separated list of local host adresses")
+	//var localNetworks = flagStringSlice{values: []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}}
+	//flag.Var(&localNetworks, "localNetworks", "The local networks of this host in comma separated CIDR notation. If values are given then defaults will be overridden, so make sure to include the defaults if you add extras and also want what was there by default. Defaults are \"10.0.0.0/8\", \"172.16.0.0/12\", \"192.168.0.0/16\"")
+	//flag.Parse()
 
-	if *iface == "" {
+	f := newFlags()
+
+	if f.iface == "" {
 		log.Printf("error: you have to specify an interface to listen on\n")
 		os.Exit(1)
 	}
 
-	if !localIPs.ok {
+	if !f.localIPs.ok {
 		log.Printf("error: no local host ip's specified\n")
 		os.Exit(1)
 	}
 
 	localIPMap := map[string]struct{}{}
-	for _, v := range localIPs.values {
+	for _, v := range f.localIPs.values {
 		localIPMap[v] = struct{}{}
 	}
 
-	metrics := newMetrics(localNetworks)
-	go metrics.startPrometheus(*promHTTP)
+	metrics := newMetrics(f.localNetworks)
+	go metrics.startPrometheus(f.promHTTP)
 
 	IPMap := map[string]map[string]data{}
-	go metrics.do(IPMap, *promRefresh)
+	go metrics.do(IPMap, f.promRefresh)
 
 	// Get a BPF filter handle that we can set the filter on.
-	handle, err := pcap.OpenLive(*iface, int32(*snaplen), *promisc, pcap.BlockForever)
+	handle, err := pcap.OpenLive(f.iface, int32(f.snaplen), f.promisc, pcap.BlockForever)
 	if err != nil {
 		log.Printf("error: pcap.OpenLive failed: %v\n", err)
 	}
 	defer handle.Close()
 
-	err = handle.SetBPFFilter(*filter)
+	err = handle.SetBPFFilter(f.filter)
 	if err != nil {
 		log.Printf("error: handle.SetBPFFilter failed: %v\n", err)
 	}

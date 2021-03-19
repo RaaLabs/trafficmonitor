@@ -6,19 +6,32 @@ A traffic monitor that shows what hosts are talking to each other, on what proto
 
 To build: Clone the repository, and run `go build` from within the repository main folder, and start the program with `sudo ./trafficmonitor <choose flags here>`
 
+To build it with the c libraries statically linked into the binary
+```bash
+LDFLAGS='-l/usr/lib/libpcap.a' CGO_ENABLED=1 \
+    go build -ldflags '-linkmode external -extldflags -static' -o static-binary
+```
+
 Flags that are currently supported are:
 
-```text
+```flags
+Usage of ./trafficmonitor:
   -filter string
     filter to use, same as nmap filters
   -iface string
     the name of the interface to listen on
   -localIPs value
     comma separated list of local host adresses
+  -localNetworks value
+    The local networks of this host in comma separated CIDR notation. If values are given then defaults will be overridden, so make sure to include the defaults if you add extras and also want what was there by default. Defaults are "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"
   -promHTTP string
     set ip and port for prometheus to listen. Ex. localhost:8888 (default ":8888")
   -promRefresh int
     the refresh rate in seconds that prometheus should refresh the metrics (default 5)
+  -promisc
+    set to true for promiscuous mode
+  -snaplen int
+    the snaplen. Values from 0-65535 (default 1500)
 ```
 
 The metrics produced will look like this
