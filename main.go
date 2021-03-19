@@ -62,7 +62,7 @@ func main() {
 	metrics := newMetrics(f.localNetworks)
 	go metrics.startPrometheus(f.promHTTP)
 
-	IPMap := map[string]map[string]data{}
+	IPMap := map[string]map[string]map[string]data{}
 	go metrics.do(IPMap, f.promRefresh)
 
 	// Get a BPF filter handle that we can set the filter on.
@@ -124,13 +124,10 @@ func main() {
 			continue
 		}
 
-		key1srcDst := d.srcIP + "->" + d.dstIP + ", proto: " + d.udpOrTcp
-
-		key1srcDstRev := d.dstIP + "->" + d.srcIP + ", proto: " + d.udpOrTcp
 		// Check if this is the return traffic for udp by checking if there had
 		// been an outbound sessions using the same two ip adresses reversed present
 		// in the map.
-		if _, ok := IPMap[key1srcDstRev][d.srcPort]; ok {
+		if _, ok := IPMap[d.dstIP][d.srcIP][d.srcPort]; ok {
 
 			// Check if the ip where defined as a local ip at startup
 			_, localIPAddrOK := localIPMap[d.dstIP]
@@ -144,7 +141,7 @@ func main() {
 			// outbound dst port prefixed with reply_. This is ok since we don't
 			// care about the source port of the inbound udp trafic.
 			// HERE:
-			if localIPAddrOK || d.dstIP == "127.0.0.1" {
+			if ok || localIPAddrOK || d.dstIP == "127.0.0.1" {
 				d.dstPort = "reply_" + d.srcPort
 			}
 		}
@@ -167,10 +164,10 @@ func main() {
 		// }
 
 		// If already present, copy totalLength and time from previous.
-		if v, ok := IPMap[key1srcDst][d.dstPort]; ok {
+		if v, ok := IPMap[d.srcIP][d.dstIP][d.dstPort]; ok {
 			d.totalAmount = v.totalAmount + d.totalAmount
 			d.firstSeen = v.firstSeen
-		} else if v, ok := IPMap[key1srcDst]["reply_"+d.dstPort]; ok {
+		} else if v, ok := IPMap[d.srcIP][d.dstIP]["reply_"+d.dstPort]; ok {
 			d.totalAmount = v.totalAmount + d.totalAmount
 			d.firstSeen = v.firstSeen
 		}
@@ -188,12 +185,28 @@ func main() {
 		}
 		// ---
 
-		// Declare the inner port map, and then store it in the outer hosts map.
-		protoMap := map[string]data{}
-		protoMap[d.dstPort] = d
 		mu.Lock()
-		IPMap[key1srcDst] = protoMap
+		var ok bool
+
+		_, ok = IPMap[d.srcIP]
+		if !ok {
+			IPMap[d.srcIP] = map[string]map[string]data{}
+		}
+		_, ok = IPMap[d.srcIP][d.dstIP]
+		if !ok {
+			IPMap[d.srcIP][d.dstIP] = map[string]data{}
+		}
+
+		IPMap[d.srcIP][d.dstIP][d.dstPort] = d
 		mu.Unlock()
 
+		fmt.Println("----------------------")
+		for ksip, vsip := range IPMap {
+			for kdip, vdip := range vsip {
+				for kdport, vdport := range vdip {
+					fmt.Printf("ksip: %v, kdip: %v, kdport: %v, vdport: %v\n", ksip, kdip, kdport, vdport)
+				}
+			}
+		}
 	}
 }

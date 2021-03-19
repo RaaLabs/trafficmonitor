@@ -56,8 +56,8 @@ func newFlags() *flags {
 
 	flag.Var(&f.localIPs, "localIPs", "comma separated list of local host adresses")
 
-	f.localNetworks = flagStringSlice{values: []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}}
-	flag.Var(&f.localNetworks, "localNetworks", "The local networks of this host in comma separated CIDR notation. If values are given then defaults will be overridden, so make sure to include the defaults if you add extras and also want what was there by default. Defaults are \"10.0.0.0/8\", \"172.16.0.0/12\", \"192.168.0.0/16\"")
+	f.localNetworks = flagStringSlice{values: []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/4"}}
+	flag.Var(&f.localNetworks, "localNetworks", "The local networks of this host in comma separated CIDR notation. If values are given then defaults will be overridden, so make sure to include the defaults if you add extras and also want what was there by default. Defaults are \"10.0.0.0/8\", \"172.16.0.0/12\", \"192.168.0.0/16\",\"224.0.0.0/4\"")
 
 	flag.Parse()
 	return &f

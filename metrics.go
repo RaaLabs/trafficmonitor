@@ -36,14 +36,14 @@ func (m *metrics) startPrometheus(port string) {
 }
 
 // doMetrics will register all the metrics for IPMap
-func (m *metrics) do(IPMap map[string]map[string]data, refresh int) {
+func (m *metrics) do(IPMap map[string]map[string]map[string]data, refresh int) {
 	hosts := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "hosts_src_dst",
 			Help: "Number of bytes transfered between hosts",
 		},
 		// []string{"addr", "port", "firstSeen", "srcPort", "dstPort"},
-		[]string{"addr", "port", "firstSeen", "dstPort"},
+		[]string{"a_srcAddr", "b_dstAddr", "c_dstPort", "d_firstSeen"},
 	)
 
 	totalInOpts := prometheus.GaugeOpts{
@@ -66,46 +66,39 @@ func (m *metrics) do(IPMap map[string]map[string]data, refresh int) {
 		var totalIn int
 		var totalOut int
 
-		for k1, v1 := range IPMap {
-			for k2, v2 := range v1 {
-				// hosts.With(prometheus.Labels{"addr": k1, "port": k2, "firstSeen": v2.firstSeen.String(), "srcPort": v2.srcPort, "dstPort": v2.dstPort}).Set(float64(v2.totalAmount))
-				hosts.With(prometheus.Labels{"addr": k1, "port": k2, "firstSeen": v2.firstSeen, "dstPort": v2.dstPort}).Set(float64(v2.totalAmount))
+		for ksip, vsip := range IPMap {
+			for kdip, vdip := range vsip {
+				for kdport, vdport := range vdip {
+					hosts.With(prometheus.Labels{"a_srcAddr": ksip, "b_dstAddr": kdip, "c_dstPort": kdport, "d_firstSeen": vdport.firstSeen}).Set(float64(vdport.totalAmount))
 
-				// ---
+					for _, v3 := range m.localNetworks.values {
+						cidr := strings.Split(v3, "/")
+						if len(cidr) < 2 {
+							log.Printf("error: local networks: wrong format of addr/maskbits\n")
+							os.Exit(1)
+						}
+						maskb, err := strconv.Atoi(cidr[1])
+						if err != nil {
+							log.Printf("error: failed to convert maskbits to int: %v\n", err)
+						}
 
-				splitK1 := strings.Split(k1, "->")
+						ok1, err := checkAddrInPrefix(vdport.srcIP, cidr[0], maskb)
+						if err != nil {
+							log.Printf("error: checkAddrInPrefix failed: %v\n", err)
+						}
+						ok2, err := checkAddrInPrefix(vdport.dstIP, cidr[0], maskb)
+						if err != nil {
+							log.Printf("error: checkAddrInPrefix failed: %v\n", err)
+						}
 
-				for _, v3 := range m.localNetworks.values {
-					cidr := strings.Split(v3, "/")
-					if len(cidr) < 2 {
-						log.Printf("error: local networks: wrong format of addr/maskbits\n")
-						os.Exit(1)
-					}
-					maskb, err := strconv.Atoi(cidr[1])
-					if err != nil {
-						log.Printf("error: failed to convert maskbits to int: %v\n", err)
-					}
-
-					srcAddr := splitK1[0]
-					splitK1Split := strings.Split(splitK1[1], ",")
-					dstAddr := splitK1Split[0]
-
-					ok1, err := checkAddrInPrefix(srcAddr, cidr[0], maskb)
-					if err != nil {
-						log.Printf("error: checkAddrInPrefix failed: %v\n", err)
-					}
-					ok2, err := checkAddrInPrefix(dstAddr, cidr[0], maskb)
-					if err != nil {
-						log.Printf("error: checkAddrInPrefix failed: %v\n", err)
-					}
-
-					if ok1 && !ok2 {
-						totalOut += v2.totalAmount
-						// fmt.Println("totalOut += v2.totalAmount: ", totalOut)
-					}
-					if !ok1 && ok2 {
-						totalIn += v2.totalAmount
-						// fmt.Println("totalIn += v2.totalAmount: ", totalIn)
+						if ok1 && !ok2 {
+							totalOut += vdport.totalAmount
+							// fmt.Println("totalOut += v2.totalAmount: ", totalOut)
+						}
+						if !ok1 && ok2 {
+							totalIn += vdport.totalAmount
+							// fmt.Println("totalIn += v2.totalAmount: ", totalIn)
+						}
 					}
 				}
 			}
