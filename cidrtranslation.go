@@ -2,10 +2,78 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"strconv"
 	"strings"
 )
+
+type localIPInfo struct {
+	address   string
+	maskBits  string
+	broadcast string
+}
+
+func getLocalIPsInfo(cidrs flagStringSlice) ([]localIPInfo, error) {
+	localIPsInfo := []localIPInfo{}
+
+	for _, v := range cidrs.values {
+		cidrSplit := strings.Split(v, "/")
+		ipAddrString := cidrSplit[0]
+		maskBitsString := cidrSplit[1]
+
+		broadCastString, err := getBroadCastAddress(ipAddrString, maskBitsString)
+		if err != nil {
+			return nil, fmt.Errorf("error: getBroadcastAddress failed: %v", err)
+		}
+
+		ipInfo := localIPInfo{
+			address:   ipAddrString,
+			maskBits:  maskBitsString,
+			broadcast: broadCastString,
+		}
+
+		localIPsInfo = append(localIPsInfo, ipInfo)
+	}
+
+	return localIPsInfo, nil
+}
+
+func getBroadCastAddress(ipAddrString string, maskBitsString string) (string, error) {
+	ipUint32, err := convertDotStringToUint32(ipAddrString)
+	if err != nil {
+		log.Printf("error: failed to convert ip address to uint32: %v\n", err)
+	}
+
+	m, err := strconv.Atoi(maskBitsString)
+	if err != nil {
+		log.Printf("error: failed to convert maskbits to int: %v\n", err)
+	}
+	maskUint32 := convertMaskbitToUint32(m)
+	invMaskUint32 := ^maskUint32
+
+	broadcastUint32 := ipUint32 | invMaskUint32
+	broadcastString := convertUint32ToDotedString(broadcastUint32)
+
+	return broadcastString, nil
+}
+
+// Convert the uint32 representation of an ip address into
+// a x.x.x.x string representation.
+func convertUint32ToDotedString(u uint32) string {
+	bs := make([]byte, 4)
+	lsb := uint32(0x000000ff)
+
+	for i := 3; i >= 0; i-- {
+		b := byte(u & lsb)
+		u = u >> 8
+		bs[i] = b
+	}
+
+	ipString := fmt.Sprintf("%v.%v.%v.%v", bs[0], bs[1], bs[2], bs[3])
+
+	return ipString
+}
 
 // Will take an address, prefix, mask bits as it's input, and return
 // true if the addr where within the specified prefix.

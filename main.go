@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -27,17 +28,18 @@ type data struct {
 }
 
 func main() {
-	//snaplen := flag.Int("snaplen", 1500, "the snaplen. Values from 0-65535")
-	//promisc := flag.Bool("promisc", false, "set to true for promiscuous mode")
-	//iface := flag.String("iface", "", "the name of the interface to listen on")
-	//filter := flag.String("filter", "", "filter to use, same as nmap filters")
-	//promHTTP := flag.String("promHTTP", ":8888", "set ip and port for prometheus to listen. Ex. localhost:8888")
-	//promRefresh := flag.Int("promRefresh", 5, "the refresh rate in seconds that prometheus should refresh the metrics")
-	//var localIPs flagStringSlice
-	//flag.Var(&localIPs, "localIPs", "comma separated list of local host adresses")
-	//var localNetworks = flagStringSlice{values: []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}}
-	//flag.Var(&localNetworks, "localNetworks", "The local networks of this host in comma separated CIDR notation. If values are given then defaults will be overridden, so make sure to include the defaults if you add extras and also want what was there by default. Defaults are \"10.0.0.0/8\", \"172.16.0.0/12\", \"192.168.0.0/16\"")
-	//flag.Parse()
+	{
+		tst := flagStringSlice{
+			values: []string{"192.168.0.1/24", "10.10.10.10/22"},
+		}
+
+		ifsInfo, err := getLocalIPsInfo(tst)
+		if err != nil {
+			log.Printf("error: getIfacesInfo: %v\n", err)
+		}
+
+		fmt.Printf("broadcasts: %v\n", ifsInfo)
+	}
 
 	f := newFlags()
 
@@ -88,14 +90,11 @@ func main() {
 			log.Printf("error getting packet: %v %v", err, ci)
 			continue
 		}
+
 		err = parser.DecodeLayers(packetData, &decoded)
 		if err != nil {
 			// log.Printf("error decoding packet: %v", err)
 			continue
-		}
-
-		if err := parser.DecodeLayers(packetData, &decoded); err != nil {
-			log.Printf("error: could not decode layers: %v\n", err)
 		}
 
 		d := data{}
