@@ -47,8 +47,8 @@ func (m *metrics) do(IPMap map[string]map[string]map[string]data, refresh int) {
 	)
 
 	totalInOpts := prometheus.GaugeOpts{
-		Name: "total_incomming",
-		Help: "total incomming bytes from internet",
+		Name: "total_incoming",
+		Help: "total incoming bytes from internet",
 	}
 	totalInGauge := promauto.NewGauge(totalInOpts)
 
