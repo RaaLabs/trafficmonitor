@@ -11,6 +11,7 @@ NB: If flag `-promisc=true` is set setting `-iface="any"` are not allowed. Only 
 To build: Clone the repository, and run `go build -o trafficmonitor` from within the repository main folder, and start the program with `sudo ./trafficmonitor <choose flags here>`
 
 To build it with the c libraries statically linked into the binary
+
 ```bash
 LDFLAGS='-l/usr/lib/libpcap.a' CGO_ENABLED=1 \
     go build -ldflags '-linkmode external -extldflags -static' -o trafficmonitor
