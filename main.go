@@ -104,7 +104,8 @@ func main() {
 			switch typ {
 			case layers.LayerTypeEthernet:
 			case layers.LayerTypeIPv4:
-				d.firstSeen = time.Now().Format("2006 01 2 15:04:05")
+				// d.firstSeen = time.Now().Format("2006 01 2 15:04:05")
+				d.firstSeen = time.Now().Format(time.RFC3339)
 				d.srcIP = ip4.SrcIP.String()
 				d.dstIP = ip4.DstIP.String()
 			case layers.LayerTypeTCP:
