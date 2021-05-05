@@ -1,0 +1,12 @@
+[Unit]
+Description=http->Traffic monitor service
+Documentation=https://github.com/RaaLabs/trafficmonitor
+After=network-online.target nss-lookup.target
+Requires=network-online.target nss-lookup.target
+
+[Service]
+ExecStart=/bin/bash -c 'LOCALIP=$(nmcli conn show WAN 2>&1|grep "ipv4.addresses"|awk "{print \$2}") && CAPTURENIC=$(nmcli conn |grep "WAN"|awk "{print \$4}")  && /usr/local/trafficmonitor/trafficmonitor -filter= -iface=${CAPTURENIC} -localIPs=${LOCALIP} -promRefresh=10 -promHTTP=127.0.0.1:8888'
+
+[Install]
+WantedBy=multi-user.target
+#Alias=packetcontrol.service
