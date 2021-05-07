@@ -1,0 +1,12 @@
+[Unit]
+Description=http->Traffic monitor service
+Documentation=https://github.com/RaaLabs/trafficmonitor
+After=network-online.target nss-lookup.target
+Requires=network-online.target nss-lookup.target
+
+[Service]
+ExecStart=/bin/bash -c '/usr/local/trafficmonitor/run.sh'
+
+[Install]
+WantedBy=multi-user.target
+#Alias=packetcontrol.service
