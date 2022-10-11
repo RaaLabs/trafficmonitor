@@ -24,6 +24,8 @@ type data struct {
 	srcPort     string
 	dstIP       string
 	dstPort     string
+	srcMac      string
+	dstMac      string
 	totalAmount int
 }
 
@@ -103,6 +105,8 @@ func main() {
 		for _, typ := range decoded {
 			switch typ {
 			case layers.LayerTypeEthernet:
+				d.srcMac = eth.SrcMAC.String()
+				d.dstMac = eth.DstMAC.String()
 			case layers.LayerTypeIPv4:
 				// d.firstSeen = time.Now().Format("2006 01 2 15:04:05")
 				d.firstSeen = time.Now().Format(time.RFC3339)

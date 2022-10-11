@@ -43,7 +43,7 @@ func (m *metrics) do(IPMap map[string]map[string]map[string]data, refresh int) {
 			Help: "Number of bytes transfered between hosts",
 		},
 		// []string{"addr", "port", "firstSeen", "srcPort", "dstPort"},
-		[]string{"a_srcAddr", "b_dstAddr", "c_dstPort", "d_firstSeen"},
+		[]string{"a_srcAddr", "b_dstAddr", "c_dstPort", "d_firstSeen", "e_srcMac", "f_dstMac"},
 	)
 
 	totalInOpts := prometheus.GaugeOpts{
@@ -69,7 +69,7 @@ func (m *metrics) do(IPMap map[string]map[string]map[string]data, refresh int) {
 		for ksip, vsip := range IPMap {
 			for kdip, vdip := range vsip {
 				for kdport, vdport := range vdip {
-					hosts.With(prometheus.Labels{"a_srcAddr": ksip, "b_dstAddr": kdip, "c_dstPort": kdport, "d_firstSeen": vdport.firstSeen}).Set(float64(vdport.totalAmount))
+					hosts.With(prometheus.Labels{"a_srcAddr": ksip, "b_dstAddr": kdip, "c_dstPort": kdport, "d_firstSeen": vdport.firstSeen, "e_srcMac": vdport.srcMac, "f_dstMac": vdport.dstMac}).Set(float64(vdport.totalAmount))
 
 					for _, v3 := range m.localNetworks.values {
 						cidr := strings.Split(v3, "/")
