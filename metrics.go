@@ -39,7 +39,7 @@ func (m *metrics) startPrometheus(port string) {
 func (m *metrics) do(IPMap map[string]map[string]map[string]data, refresh int) {
 	hosts := prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "hosts_src_dst",
+			Name: "trafficmonitor_hosts_src_dst",
 			Help: "Number of bytes transfered between hosts",
 		},
 		// []string{"addr", "port", "firstSeen", "srcPort", "dstPort"},
@@ -47,13 +47,13 @@ func (m *metrics) do(IPMap map[string]map[string]map[string]data, refresh int) {
 	)
 
 	totalInOpts := prometheus.GaugeOpts{
-		Name: "total_incoming",
+		Name: "trafficmonitor_total_incoming_bytes",
 		Help: "total incoming bytes from internet",
 	}
 	totalInGauge := promauto.NewGauge(totalInOpts)
 
 	totalOutOpts := prometheus.GaugeOpts{
-		Name: "total_outgoing",
+		Name: "trafficmonitor_total_outgoing_bytes",
 		Help: "total outgoing bytes from internet",
 	}
 	totalOutGauge := promauto.NewGauge(totalOutOpts)
